@@ -40,6 +40,7 @@ def jwt_key():
     path = os.path.join(DATA, "certs", "jwt.key")
     if not os.path.exists(path):
         key = ec.generate_private_key(ec.SECP256R1())
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "wb") as f:
             f.write(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                       serialization.NoEncryption()))

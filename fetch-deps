@@ -22,7 +22,7 @@ get() {
 	local f=$CACHE/$3
 	[[ -f $f ]] && echo "$2  $f" | sha256sum -c --status && return
 	say "downloading $3"
-	curl -fL --retry 3 -o "$f.part" "$1"
+	curl -fL --progress-bar --retry 3 -o "$f.part" "$1"
 	echo "$2  $f.part" | sha256sum -c --quiet || { rm -f "$f.part"; say "$3: hash mismatch"; exit 1; }
 	mv "$f.part" "$f"
 }
