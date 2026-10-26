@@ -1,0 +1,10 @@
+{
+  "FFlagDebugGraphicsDisableD3D11": false,
+  "FFlagDebugGraphicsDisableD3D11FL10": true,
+  "FFlagDebugGraphicsDisableOpenGL": true,
+  "FFlagDebugGraphicsDisableVulkan": true,
+  "FFlagDebugGraphicsPreferD3D11": true,
+  "FFlagDebugGraphicsPreferD3D11FL10": false,
+  "FFlagDebugGraphicsPreferOpenGL": false,
+  "FFlagDebugGraphicsPreferVulkan": false
+}

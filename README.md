@@ -7,7 +7,7 @@ running with **no internet access at all**.
     WAXLEY_HIDDEN=1 waxley ...     # headless gamescope, for testing
 
 Wick (Sober, the Android client, offline on top of Waxley) lives in its own repo:
-[rippelz/wick-private](https://github.com/rippelz/wick-private). It imports `mockblox.py`, `routes.py` and
+[rippelz/wick](https://github.com/rippelz/wick). It imports `mockblox.py`, `routes.py` and
 `creds.py` from here, so keep those interfaces stable.
 
 ## How it stays offline
@@ -55,22 +55,27 @@ via `rbxasset://`.
 - Studio's 3 GB online cache can't be read by asset id; assets come from `assets/` only.
 
 ## Install
+    git clone https://github.com/rippelz/waxley && cd waxley
+    ./fetch-deps
     ln -s "$PWD/waxley" ~/.local/bin/waxley
     cp icon/waxley.svg ~/.local/share/icons/hicolor/scalable/apps/
     cp desktop/waxley.desktop ~/.local/share/applications/
-Needs Vinegar (its Wine build + a Studio install), `unshare`, python3 with `cryptography`;
-gamescope for `WAXLEY_HIDDEN=1`. `tools/` also wants numpy.
 
-## Pinned versions
+`fetch-deps` sets up everything at the builds pinned in `versions.env`, checking every download
+against a hash, and skips what's already right (`--force` redoes it all):
+- **Vinegar** from Flathub, pinned to `VINEGAR_COMMIT` and masked so it stays there.
+- **Vinegar's Wine build** (`WINE_BUILD`). Vinegar only keeps its newest builds online, so it's
+  mirrored on this repo's [`deps` release](https://github.com/rippelz/waxley/releases/tag/deps)
+  (Wine is LGPL).
+- **Roblox Studio** (`STUDIO_VERSION`) straight from Roblox's CDN (`deps/studio.py`), plus DXVK
+  and Vinegar's renderer flags: the same files Vinegar installs. Roblox drops old builds
+  eventually; this one was still served on 2026-10-25.
+- **The offline prefix**, copied from Vinegar's Studio prefix (it has the WebView2 runtime). On a
+  machine that never ran Vinegar, run it once (`flatpak run org.vinegarhq.Vinegar`), let Studio
+  open, close it, and run `fetch-deps` again.
+- **Mock data** from `defaults/mock/` (the fake user + Studio flag snapshots), only if missing.
 
-**Easiest:** `./fetch-deps` downloads all three from this repo's private
-[`deps` release](https://github.com/rippelz/waxley-private/releases/tag/deps) (needs `gh auth login`),
-checks them against `SHA256SUMS`, and installs whatever is missing or wrong. Then run `waxley` once.
-The binaries are Roblox's and Vinegar's: keep the repo private.
-`versions.env` lists the builds Waxley is tested with; `waxley` warns at startup when one differs.
-- Vinegar: `flatpak install flathub org.vinegarhq.Vinegar`, then
-  `flatpak update --commit=<VINEGAR_COMMIT> org.vinegarhq.Vinegar` (Flathub keeps old commits).
-- Wine (`WINE_BUILD`): downloaded by Vinegar; `kombucha` is a symlink to it.
-- Studio (`STUDIO_VERSION`): `https://setup.rbxcdn.com/<STUDIO_VERSION>-rbxPkgManifest.txt` lists the
-  zips under the same prefix (still served as of 2026-10-25; Roblox drops old builds eventually).
-  Unpack into `~/.local/share/waxley/studio/`; `STUDIO_EXE_SHA256` checks the result.
+`waxley` itself warns at startup when an installed build differs from `versions.env`.
+
+Also needs `unshare`, socat, curl, zstd, python3 with `cryptography`; gamescope for
+`WAXLEY_HIDDEN=1`. `tools/` also wants numpy.

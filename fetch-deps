@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
-# Install the exact builds in versions.env from this repo's "deps" GitHub release (private:
-# needs `gh auth login` with access to rippelz/waxley-private). Skips what's already right.
+# Set up everything Waxley needs, at the exact builds in versions.env:
+#   - Vinegar from Flathub, pinned to VINEGAR_COMMIT (and masked so it stays there)
+#   - Vinegar's Wine build (WINE_BUILD) from this repo's "deps" release
+#   - Roblox Studio (STUDIO_VERSION) from Roblox's own CDN (deps/studio.py), plus DXVK and
+#     Vinegar's renderer flags, the same layout Vinegar installs
+#   - the offline prefix (a copy of Vinegar's Studio prefix) and the mock data in defaults/
+# Every download is checked against a hash. Skips whatever is already right.
 #   fetch-deps [--force]
 set -euo pipefail
 HERE=$(dirname "$(realpath "$0")")
@@ -9,41 +14,73 @@ DATA=${WAXLEY_DATA:-$HOME/.local/share/waxley}
 VIN=$HOME/.var/app/org.vinegarhq.Vinegar/data/vinegar
 CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/waxley-deps
 FORCE=${1:-}
-mkdir -p "$CACHE"; cd "$CACHE"
+say() { echo "fetch-deps: $*" >&2; }
+mkdir -p "$CACHE"
 
-gh release download deps -R rippelz/waxley-private --clobber -p SHA256SUMS
-get() {  # download one asset unless it's cached and matches SHA256SUMS
-	grep -F "  $1" SHA256SUMS | sha256sum -c --status 2>/dev/null && return
-	echo "fetch-deps: downloading $1" >&2
-	gh release download deps -R rippelz/waxley-private --clobber -p "$1"
-	grep -F "  $1" SHA256SUMS | sha256sum -c --quiet
+# get <url> <sha256> <file>: download into the cache unless it's already there and matches
+get() {
+	local f=$CACHE/$3
+	[[ -f $f ]] && echo "$2  $f" | sha256sum -c --status && return
+	say "downloading $3"
+	curl -fL --retry 3 -o "$f.part" "$1"
+	echo "$2  $f.part" | sha256sum -c --quiet || { rm -f "$f.part"; say "$3: hash mismatch"; exit 1; }
+	mv "$f.part" "$f"
 }
 
-# Vinegar (the app; its GNOME runtime comes from Flathub)
+# Vinegar, pinned
+flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 if [[ $(flatpak info -c org.vinegarhq.Vinegar 2>/dev/null) != "$VINEGAR_COMMIT" || $FORCE == --force ]]; then
-	get "vinegar-$VINEGAR_VERSION.flatpak"
-	flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-	flatpak install --user --noninteractive --reinstall --bundle "vinegar-$VINEGAR_VERSION.flatpak"
-	flatpak mask --user org.vinegarhq.Vinegar  # keep it on this build
+	say "Vinegar $VINEGAR_VERSION"
+	flatpak info org.vinegarhq.Vinegar >/dev/null 2>&1 || flatpak install --user --noninteractive flathub org.vinegarhq.Vinegar
+	inst=--user; flatpak info --user org.vinegarhq.Vinegar >/dev/null 2>&1 || inst=--system
+	flatpak mask --remove $inst org.vinegarhq.Vinegar 2>/dev/null || true
+	flatpak update $inst --noninteractive --commit="$VINEGAR_COMMIT" org.vinegarhq.Vinegar
+	flatpak mask $inst org.vinegarhq.Vinegar
 fi
 
-# Wine build Vinegar runs Studio with
+# Wine
 if [[ ! -x $VIN/$WINE_BUILD/bin/wine || $FORCE == --force ]]; then
-	get "wine-$WINE_BUILD.tar.zst"
+	get "$WINE_URL" "$WINE_SHA256" "wine-$WINE_BUILD.tar.zst"
 	mkdir -p "$VIN"; rm -rf "${VIN:?}/$WINE_BUILD"
-	zstd -dc "wine-$WINE_BUILD.tar.zst" | tar -C "$VIN" -xf -
+	zstd -dc "$CACHE/wine-$WINE_BUILD.tar.zst" | tar -C "$VIN" -xf -
 fi
 [[ -e $VIN/kombucha ]] || ln -s "$WINE_BUILD" "$VIN/kombucha"
 
-# Studio: pristine copy in Vinegar's versions dir, Waxley's own copy in $DATA/studio
-if [[ ! -f $VIN/versions/$STUDIO_VERSION/RobloxStudioBeta.exe || $FORCE == --force ]]; then
-	get "studio-$STUDIO_VERSION.tar.zst"
-	mkdir -p "$VIN/versions"; rm -rf "${VIN:?}/versions/$STUDIO_VERSION"
-	zstd -dc "studio-$STUDIO_VERSION.tar.zst" | tar -C "$VIN/versions" -xf -
+# Studio: Roblox's packages + DXVK + Vinegar's renderer flags, in Vinegar's versions dir
+SV=$VIN/versions/$STUDIO_VERSION
+if [[ ! -f $SV/RobloxStudioBeta.exe || $(sha256sum "$SV/RobloxStudioBeta.exe" | cut -d' ' -f1) != "$STUDIO_EXE_SHA256" || $FORCE == --force ]]; then
+	say "Studio $STUDIO_VERSION from Roblox's CDN"
+	mkdir -p "$VIN/versions"
+	python3 -I "$HERE/deps/studio.py" "$STUDIO_VERSION" "$SV"
+	[[ $(sha256sum "$SV/RobloxStudioBeta.exe" | cut -d' ' -f1) == "$STUDIO_EXE_SHA256" ]] || { say "Studio exe hash mismatch"; exit 1; }
 fi
+if [[ ! -f $SV/dxgi.dll || $FORCE == --force ]]; then
+	get "$DXVK_URL" "$DXVK_SHA256" "dxvk-$DXVK_VERSION.tar.gz"
+	tar -C "$SV" -xzf "$CACHE/dxvk-$DXVK_VERSION.tar.gz" --strip-components=2 --wildcards "dxvk-$DXVK_VERSION/x64/*.dll"
+fi
+mkdir -p "$SV/ClientSettings"
+[[ -f $SV/ClientSettings/ClientAppSettings.json ]] || cp "$HERE/deps/studio-ClientAppSettings.json" "$SV/ClientSettings/ClientAppSettings.json"
+
+# Waxley's own copy of Studio
 if [[ ! -f $DATA/studio/RobloxStudioBeta.exe || $(sha256sum "$DATA/studio/RobloxStudioBeta.exe" | cut -d' ' -f1) != "$STUDIO_EXE_SHA256" ]]; then
-	echo "fetch-deps: copying Studio to $DATA/studio" >&2
+	say "copying Studio to $DATA/studio"
 	rm -rf "$DATA/studio"; mkdir -p "$DATA"
-	cp -a --reflink=auto "$VIN/versions/$STUDIO_VERSION" "$DATA/studio"
+	cp -a --reflink=auto "$SV" "$DATA/studio"
 fi
-echo "fetch-deps: Vinegar $VINEGAR_VERSION, $WINE_BUILD, Studio $STUDIO_VERSION ready" >&2
+
+# Mock data (only what's missing; edit your copies freely)
+mkdir -p "$DATA/mock"
+cp -n "$HERE"/defaults/mock/* "$DATA/mock/"
+
+# The offline prefix: a copy of Vinegar's Studio prefix (it has the WebView2 runtime Studio needs)
+if [[ ! -d $DATA/prefix ]]; then
+	if [[ -d $VIN/prefixes/studio/drive_c ]]; then
+		say "copying Vinegar's Studio prefix to $DATA/prefix"
+		cp -a --reflink=auto "$VIN/prefixes/studio" "$DATA/prefix"
+	else
+		say "no Vinegar prefix yet: run Vinegar once (flatpak run org.vinegarhq.Vinegar), let it"
+		say "start Studio, close it, then run fetch-deps again"
+		exit 2
+	fi
+fi
+say "ready: Vinegar $VINEGAR_VERSION, $WINE_BUILD, Studio $STUDIO_VERSION, prefix $DATA/prefix"
