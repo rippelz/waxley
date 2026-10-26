@@ -1,0 +1,17 @@
+{
+  "_why": "wick: FastFlags for the local Studio game server, on top of Waxley's ClientAppSettings.json",
+  "FFlagDebugRbxTransportUseTestKey": true,
+  "DFFlagDebugRbxTransportUseTestKey": true,
+  "FFlagUseRbxTransportClient": true,
+  "DFFlagUseRbxTransportClient": true,
+  "SFFlagUseRbxTransportClient": true,
+  "FFlagSendsGoThroughConnection": true,
+  "DFFlagSendsGoThroughConnection": true,
+  "SFFlagSendsGoThroughConnection": true,
+  "FFlagRefactorIngressFlow": true,
+  "DFFlagRefactorIngressFlow": true,
+  "SFFlagRefactorIngressFlow": true,
+  "SFFlagDebugRbxTransportUseTestKey": true,
+  "DFFlagISRTimestampHandshakeOnConnect": "False",
+  "DFFlagISRTimestampHeartbeat": "False"
+}

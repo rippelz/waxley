@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Waxley: offline Roblox Studio. Vinegar's Wine + a separate copy of the Studio install
+# and prefix, run in its own network namespace with loopback only. Nothing in
+# it can reach the internet:
+#   - DNS and the Roblox web endpoints are answered by mockblox.py on 127.0.0.1
+#   - the systemd-resolved socket is hidden so lookups can't leak through it
+#   - Argon ports are bridged to the host's loopback (and nothing else). WAXLEY_ARGON_PORTS
+#     (default 8000-8010) takes "port" or "guestport:hostport", e.g. "8000:8015"
+#
+#   waxley [place.rbxl]              normal window
+#   WAXLEY_HIDDEN=1 waxley [...]     headless gamescope, nothing on screen
+set -euo pipefail
+
+SELF=$(realpath "$0")
+HERE=$(dirname "$SELF")
+export DATA=${WAXLEY_DATA:-$HOME/.local/share/waxley}
+export WAXLEY_DATA=$DATA
+WINE_ROOT=${WAXLEY_WINE:-$HOME/.var/app/org.vinegarhq.Vinegar/data/vinegar/kombucha}
+ARGON_PORTS=${WAXLEY_ARGON_PORTS:-$(seq -s ' ' 8000 8010)}
+RUN=$DATA/run
+
+case ${WAXLEY_STAGE:-host} in
+host)
+	mkdir -p "$RUN" "$DATA/etc"
+	printf 'nameserver 127.0.0.1\n' >"$DATA/etc/resolv.conf"
+	printf 'hosts: files dns\n' >"$DATA/etc/nsswitch.conf"
+	printf '127.0.0.1 localhost\n::1 localhost\n10.77.0.2 %s\nfd77::2 %s\n' "$(hostname)" "$(hostname)" >"$DATA/etc/hosts"
+
+	# Fresh fake login (Studio wipes it if it ever logs out). Skip if another Waxley is running.
+	if ! compgen -G "$RUN/bridge-*" >/dev/null || ! pgrep -f "$DATA/studio/RobloxStudioBeta.exe" >/dev/null; then
+		rm -rf "$RUN"/bridge-*
+		python3 "$HERE/creds.py" seed >/dev/null
+	fi
+
+	# Trust mockblox's local CA in the Waxley copy only
+	CACERT=$DATA/studio/ssl/cacert.pem
+	[[ -e $CACERT.orig ]] || cp "$CACERT" "$CACERT.orig"
+	{ cat "$CACERT.orig"; python3 "$HERE/mockblox.py" --ca; } >"$CACERT"
+
+	# Host side of the Argon bridge: unix socket -> host 127.0.0.1:port (one socket dir per instance)
+	export BRIDGE=$RUN/bridge-$$
+	mkdir -p "$BRIDGE"
+	pids=()
+	cleanup() { kill "${pids[@]}" 2>/dev/null || true; rm -rf "$BRIDGE"; }
+	trap cleanup EXIT
+	for spec in $ARGON_PORTS; do  # "port" or "guestport:hostport"
+		socat UNIX-LISTEN:"$BRIDGE/argon-${spec%%:*}.sock",fork,mode=600 TCP:127.0.0.1:"${spec##*:}" 2>/dev/null &
+		pids+=($!)
+	done
+
+	# Linux paths -> Z:\ paths for Studio
+	args=()
+	for a in "$@"; do
+		if [[ -e $a ]]; then a=$(realpath "$a"); args+=("Z:${a//\//\\}"); else args+=("$a"); fi
+	done
+
+	wrap=()
+	# Test mode: headless gamescope, started outside the namespace (it needs the real /tmp/.X11-unix owner).
+	# Keys reach Studio there but mouse clicks don't.
+	[[ ${WAXLEY_HIDDEN:-} == 1 ]] && wrap=(gamescope --backend headless -W 1920 -H 1080 --)
+	WAXLEY_STAGE=root OUTER_UID=$(id -u) OUTER_GID=$(id -g) \
+		"${wrap[@]}" unshare --user --map-root-user --net --mount --propagation private "$SELF" "${args[@]}"
+	;;
+
+root)
+	# Fake root inside our own user/net/mount namespaces: set up the sandbox, then drop back to our uid
+	ip link set lo up
+	# A fake LAN interface with no route anywhere: Play Solo's local server wants a non-loopback address
+	ip link add os0 type dummy
+	ip link set os0 up
+	ip addr add 10.77.0.2/24 dev os0
+	ip -6 addr add fd77::2/64 dev os0 nodad
+	echo 0 >/proc/sys/net/ipv4/ip_unprivileged_port_start
+	for f in resolv.conf nsswitch.conf hosts; do mount --bind "$DATA/etc/$f" "/etc/$f"; done
+	[[ -d /run/systemd/resolve ]] && mount -t tmpfs none /run/systemd/resolve
+	WAXLEY_STAGE=user exec unshare --user --map-user="$OUTER_UID" --map-group="$OUTER_GID" "$SELF" "$@"
+	;;
+
+user)
+	trap 'kill $(jobs -p) 2>/dev/null' EXIT
+	python3 "$HERE/mockblox.py" 2>>"$RUN/mockblox.err" &
+	# Guest side of the Argon bridge: 127.0.0.1:port -> unix socket
+	for spec in $ARGON_PORTS; do
+		p=${spec%%:*}
+		socat TCP-LISTEN:"$p",bind=127.0.0.1,reuseaddr,fork UNIX-CONNECT:"$BRIDGE/argon-$p.sock" 2>/dev/null &
+	done
+	unset DBUS_SESSION_BUS_ADDRESS WAYLAND_DISPLAY
+	export WINEPREFIX=${WAXLEY_PREFIX:-$DATA/prefix}
+	export WINEDEBUG=${WINEDEBUG:--all}
+	# no desktop menu entries, no handing URLs to the host browser
+	export WINEDLLOVERRIDES="winemenubuilder.exe=d;winebrowser.exe=d"
+	export WINEESYNC=1 WINEFSYNC=1
+	cd "$DATA/studio"
+	# debugging hook: run a shell command inside the sandbox instead of Studio
+	if [[ -n ${WAXLEY_CMD:-} ]]; then sleep 1; bash -c "$WAXLEY_CMD"; exit; fi
+	"$WINE_ROOT/bin/wine" "$DATA/studio/RobloxStudioBeta.exe" "$@"
+	"$WINE_ROOT/bin/wineserver" -w
+	;;
+esac
