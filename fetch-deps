@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Install the exact builds in versions.env from this repo's "deps" GitHub release (private:
+# needs `gh auth login` with access to rippelz/waxley). Skips what's already right.
+#   fetch-deps [--force]
+set -euo pipefail
+HERE=$(dirname "$(realpath "$0")")
+source "$HERE/versions.env"
+DATA=${WAXLEY_DATA:-$HOME/.local/share/waxley}
+VIN=$HOME/.var/app/org.vinegarhq.Vinegar/data/vinegar
+CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/waxley-deps
+FORCE=${1:-}
+mkdir -p "$CACHE"; cd "$CACHE"
+
+gh release download deps -R rippelz/waxley --clobber -p SHA256SUMS
+get() {  # download one asset unless it's cached and matches SHA256SUMS
+	grep -F "  $1" SHA256SUMS | sha256sum -c --status 2>/dev/null && return
+	echo "fetch-deps: downloading $1" >&2
+	gh release download deps -R rippelz/waxley --clobber -p "$1"
+	grep -F "  $1" SHA256SUMS | sha256sum -c --quiet
+}
+
+# Vinegar (the app; its GNOME runtime comes from Flathub)
+if [[ $(flatpak info -c org.vinegarhq.Vinegar 2>/dev/null) != "$VINEGAR_COMMIT" || $FORCE == --force ]]; then
+	get "vinegar-$VINEGAR_VERSION.flatpak"
+	flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+	flatpak install --user --noninteractive --reinstall --bundle "vinegar-$VINEGAR_VERSION.flatpak"
+	flatpak mask --user org.vinegarhq.Vinegar  # keep it on this build
+fi
+
+# Wine build Vinegar runs Studio with
+if [[ ! -x $VIN/$WINE_BUILD/bin/wine || $FORCE == --force ]]; then
+	get "wine-$WINE_BUILD.tar.zst"
+	mkdir -p "$VIN"; rm -rf "${VIN:?}/$WINE_BUILD"
+	zstd -dc "wine-$WINE_BUILD.tar.zst" | tar -C "$VIN" -xf -
+fi
+[[ -e $VIN/kombucha ]] || ln -s "$WINE_BUILD" "$VIN/kombucha"
+
+# Studio: pristine copy in Vinegar's versions dir, Waxley's own copy in $DATA/studio
+if [[ ! -f $VIN/versions/$STUDIO_VERSION/RobloxStudioBeta.exe || $FORCE == --force ]]; then
+	get "studio-$STUDIO_VERSION.tar.zst"
+	mkdir -p "$VIN/versions"; rm -rf "${VIN:?}/versions/$STUDIO_VERSION"
+	zstd -dc "studio-$STUDIO_VERSION.tar.zst" | tar -C "$VIN/versions" -xf -
+fi
+if [[ ! -f $DATA/studio/RobloxStudioBeta.exe || $(sha256sum "$DATA/studio/RobloxStudioBeta.exe" | cut -d' ' -f1) != "$STUDIO_EXE_SHA256" ]]; then
+	echo "fetch-deps: copying Studio to $DATA/studio" >&2
+	rm -rf "$DATA/studio"; mkdir -p "$DATA"
+	cp -a --reflink=auto "$VIN/versions/$STUDIO_VERSION" "$DATA/studio"
+fi
+echo "fetch-deps: Vinegar $VINEGAR_VERSION, $WINE_BUILD, Studio $STUDIO_VERSION ready" >&2

@@ -62,6 +62,11 @@ Needs Vinegar (its Wine build + a Studio install), `unshare`, python3 with `cryp
 gamescope for `WAXLEY_HIDDEN=1`. `tools/` also wants numpy.
 
 ## Pinned versions
+
+**Easiest:** `./fetch-deps` downloads all three from this repo's private
+[`deps` release](https://github.com/rippelz/waxley/releases/tag/deps) (needs `gh auth login`),
+checks them against `SHA256SUMS`, and installs whatever is missing or wrong. Then run `waxley` once.
+The binaries are Roblox's and Vinegar's: keep the repo private.
 `versions.env` lists the builds Waxley is tested with; `waxley` warns at startup when one differs.
 - Vinegar: `flatpak install flathub org.vinegarhq.Vinegar`, then
   `flatpak update --commit=<VINEGAR_COMMIT> org.vinegarhq.Vinegar` (Flathub keeps old commits).
