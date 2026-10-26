@@ -19,9 +19,32 @@ WINE_ROOT=${WAXLEY_WINE:-$HOME/.var/app/org.vinegarhq.Vinegar/data/vinegar/kombu
 ARGON_PORTS=${WAXLEY_ARGON_PORTS:-$(seq -s ' ' 8000 8010)}
 RUN=$DATA/run
 
+# Warn if the installed builds aren't the ones in versions.env (hashes cached by size+mtime)
+sha_cached() {
+	local f=$1 c=$DATA/run/sha-cache key
+	key="$f $(stat -c '%s %Y' "$f")"
+	local h; h=$(grep -F -m1 "$key " "$c" 2>/dev/null | awk '{print $NF}')
+	[[ -n $h ]] && { echo "$h"; return; }
+	h=$(sha256sum "$f" | cut -d' ' -f1)
+	mkdir -p "${c%/*}"; echo "$key $h" >>"$c"; echo "$h"
+}
+check_versions() {
+	source "$HERE/versions.env"
+	local w=() c
+	c=$(flatpak info -c org.vinegarhq.Vinegar 2>/dev/null || true)
+	[[ $c == "$VINEGAR_COMMIT" ]] || w+=("Vinegar commit ${c:-missing} (want $VINEGAR_VERSION, $VINEGAR_COMMIT)")
+	c=$(basename "$(realpath "$WINE_ROOT" 2>/dev/null)")
+	[[ $c == "$WINE_BUILD" ]] || w+=("Wine build ${c:-missing} (want $WINE_BUILD)")
+	if [[ -f $DATA/studio/RobloxStudioBeta.exe ]]; then
+		[[ $(sha_cached "$DATA/studio/RobloxStudioBeta.exe") == "$STUDIO_EXE_SHA256" ]] || w+=("Studio copy isn't $STUDIO_VERSION")
+	else w+=("no Studio copy at $DATA/studio (want $STUDIO_VERSION)"); fi
+	local x; for x in "${w[@]}"; do echo "waxley: warning: $x" >&2; done
+}
+
 case ${WAXLEY_STAGE:-host} in
 host)
 	mkdir -p "$RUN" "$DATA/etc"
+	check_versions
 	printf 'nameserver 127.0.0.1\n' >"$DATA/etc/resolv.conf"
 	printf 'hosts: files dns\n' >"$DATA/etc/nsswitch.conf"
 	printf '127.0.0.1 localhost\n::1 localhost\n10.77.0.2 %s\nfd77::2 %s\n' "$(hostname)" "$(hostname)" >"$DATA/etc/hosts"

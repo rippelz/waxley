@@ -60,3 +60,12 @@ via `rbxasset://`.
     cp desktop/waxley.desktop ~/.local/share/applications/
 Needs Vinegar (its Wine build + a Studio install), `unshare`, python3 with `cryptography`;
 gamescope for `WAXLEY_HIDDEN=1`. `tools/` also wants numpy.
+
+## Pinned versions
+`versions.env` lists the builds Waxley is tested with; `waxley` warns at startup when one differs.
+- Vinegar: `flatpak install flathub org.vinegarhq.Vinegar`, then
+  `flatpak update --commit=<VINEGAR_COMMIT> org.vinegarhq.Vinegar` (Flathub keeps old commits).
+- Wine (`WINE_BUILD`): downloaded by Vinegar; `kombucha` is a symlink to it.
+- Studio (`STUDIO_VERSION`): `https://setup.rbxcdn.com/<STUDIO_VERSION>-rbxPkgManifest.txt` lists the
+  zips under the same prefix (still served as of 2026-10-25; Roblox drops old builds eventually).
+  Unpack into `~/.local/share/waxley/studio/`; `STUDIO_EXE_SHA256` checks the result.
