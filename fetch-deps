@@ -51,6 +51,19 @@ SV=$VIN/versions/$STUDIO_VERSION
 if [[ ! -f $SV/RobloxStudioBeta.exe || $(sha256sum "$SV/RobloxStudioBeta.exe" | cut -d' ' -f1) != "$STUDIO_EXE_SHA256" || $FORCE == --force ]]; then
 	say "Studio $STUDIO_VERSION from Roblox's CDN"
 	mkdir -p "$VIN/versions"
+	# Roblox drops old builds: then fall back to a backup of its original files (STUDIO_ARCHIVE_URL,
+	# or STUDIO_ARCHIVE=<local .tar>), still checked against the manifest's MD5s
+	if ! curl -fsI "https://setup.rbxcdn.com/$STUDIO_VERSION-rbxPkgManifest.txt" >/dev/null; then
+		ar=${STUDIO_ARCHIVE:-}
+		if [[ -z $ar ]]; then
+			[[ -n ${STUDIO_ARCHIVE_URL:-} ]] || { say "Roblox no longer serves $STUDIO_VERSION; set STUDIO_ARCHIVE=<backup .tar>"; exit 1; }
+			get "$STUDIO_ARCHIVE_URL" "$STUDIO_ARCHIVE_SHA256" "studio-$STUDIO_VERSION-packages.tar"
+			ar=$CACHE/studio-$STUDIO_VERSION-packages.tar
+		fi
+		say "Roblox no longer serves $STUDIO_VERSION, installing from $ar"
+		tar -C "$CACHE" -xf "$ar"
+		export STUDIO_MIRRORS="file://$CACHE/$STUDIO_VERSION"
+	fi
 	python3 -I "$HERE/deps/studio.py" "$STUDIO_VERSION" "$SV"
 	[[ $(sha256sum "$SV/RobloxStudioBeta.exe" | cut -d' ' -f1) == "$STUDIO_EXE_SHA256" ]] || { say "Studio exe hash mismatch"; exit 1; }
 fi

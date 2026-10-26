@@ -69,7 +69,9 @@ against a hash, and skips what's already right (`--force` redoes it all):
   (Wine is LGPL).
 - **Roblox Studio** (`STUDIO_VERSION`) straight from Roblox's CDN (`deps/studio.py`), plus DXVK
   and Vinegar's renderer flags: the same files Vinegar installs. Roblox drops old builds
-  eventually; this one was still served on 2026-10-25.
+  eventually; this one was still served on 2026-10-25. After that, `fetch-deps` installs from a
+  backup of Roblox's original files instead (`STUDIO_ARCHIVE=<.tar>`, or `STUDIO_ARCHIVE_URL` in
+  `versions.env`), still checked against Roblox's own MD5s.
 - **The offline prefix**, copied from Vinegar's Studio prefix (it has the WebView2 runtime). On a
   machine that never ran Vinegar, run it once (`flatpak run org.vinegarhq.Vinegar`), let Studio
   open, close it, and run `fetch-deps` again.

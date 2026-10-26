@@ -3,6 +3,8 @@
 
     studio.py <version-hash> <dest-dir>
 
+STUDIO_MIRRORS (space-separated base URLs, file:// works) are tried before Roblox's own, e.g. an
+unpacked backup of the original files (fetch-deps does that when Roblox no longer has the build).
 The package -> folder map comes out of that build's RobloxStudioInstaller.exe (like Vinegar's
 rbxbin does); every zip is checked against the MD5 in rbxPkgManifest.txt.
 """
@@ -10,6 +12,7 @@ import hashlib, io, json, os, re, shutil, sys, urllib.request, zipfile
 
 MIRRORS = ["https://setup.rbxcdn.com", "https://roblox-setup.cachefly.net",
            "https://s3.amazonaws.com/setup.roblox.com"]
+MIRRORS[:0] = os.environ.get("STUDIO_MIRRORS", "").split()
 
 
 def fetch(name):
