@@ -6,6 +6,10 @@ running with **no internet access at all**.
     waxley [place.rbxl]                    # also: "Waxley" in the app menu
     WAXLEY_HIDDEN=1 waxley ...     # headless gamescope, for testing
 
+Wick (Sober, the Android client, offline on top of Waxley) lives in its own repo:
+[rippelz/wick](https://github.com/rippelz/wick). It imports `mockblox.py`, `routes.py` and
+`creds.py` from here, so keep those interfaces stable.
+
 ## How it stays offline
 - Own user + network + mount namespace (`unshare`). Interfaces: `lo` and a dummy `os0`
   (10.77.0.2, no routes; Play Solo's local server needs a non-loopback address).
