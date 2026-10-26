@@ -53,3 +53,10 @@ via `rbxasset://`.
 - HttpService is off in Play for an unpublished place: get big test output out through tagged
   `print` chunks in the Studio log.
 - Studio's 3 GB online cache can't be read by asset id; assets come from `assets/` only.
+
+## Install
+    ln -s "$PWD/waxley" ~/.local/bin/waxley
+    cp icon/waxley.svg ~/.local/share/icons/hicolor/scalable/apps/
+    cp desktop/waxley.desktop ~/.local/share/applications/
+Needs Vinegar (its Wine build + a Studio install), `unshare`, python3 with `cryptography`;
+gamescope for `WAXLEY_HIDDEN=1`. `tools/` also wants numpy.

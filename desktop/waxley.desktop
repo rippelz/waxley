@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Waxley
+GenericName=Offline Roblox Studio
+Comment=Roblox Studio with no internet access; local assets, Argon on localhost
+Exec=sh -c "exec $HOME/.local/bin/waxley %f"
+Icon=waxley
+Terminal=false
+Categories=Development;Game;
+MimeType=application/x-roblox-rbxl;application/x-roblox-rbxlx;
+StartupWMClass=robloxstudiobeta.exe
